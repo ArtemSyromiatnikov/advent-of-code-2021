@@ -1,0 +1,117 @@
+﻿var fileLines = File.ReadAllLines("inputFull.txt");
+int SIZE = fileLines.Length;
+Node[,] map = new Node[SIZE, SIZE];
+
+// Create Nodes
+for (int i = 0; i < SIZE; i++)
+{
+    for (int j = 0; j < SIZE; j++)
+    {
+        map[i, j] = new Node(fileLines[i][j] - 48, i, j);
+    }
+}
+
+// Initialize Edges
+for (int i = 0; i < SIZE; i++)
+{
+    for (int j = 0; j < SIZE; j++)
+    {
+        if (i > 0)
+            map[i, j].AddEdgeTo(map[i - 1, j]);
+        if (i < SIZE-1)
+            map[i, j].AddEdgeTo(map[i + 1, j]);
+        if (j > 0)
+            map[i, j].AddEdgeTo(map[i, j - 1]);
+        if (j < SIZE-1)
+            map[i, j].AddEdgeTo(map[i, j + 1]);
+    }
+}
+
+// Dijkstra shortest path now!
+var startNode = map[0, 0];
+var endNode = map[SIZE-1, SIZE-1];
+
+// For each node, save the length of the shortest path to it
+var processedNodes = new HashSet<Node>() { startNode };
+var distances = new Dictionary<Node, int>() { { startNode, 0 } };
+
+// analyzed paths that still have unvisited neighbours
+var edgeNodes = new HashSet<Node> { startNode };
+
+do
+{
+    if (processedNodes.Count % 100 == 0)
+        Console.WriteLine($"Processed nodes: {processedNodes.Count}    edgeNodes: {edgeNodes.Count}");
+    
+    // analyze each possible single step from each edge node.
+    // select the one having the shortest paths
+    (Node fromNode, Node toNode, int distance) = edgeNodes
+        .SelectMany(n => n.Neighbors
+            .Except(processedNodes)
+            .Select(neighbor => (FromNode: n, ToNode: neighbor, distance: distances[n] + neighbor.RiskLevel))
+        )
+        .MinBy(tuple => tuple.distance);
+    //Console.WriteLine($"Next shortest step:  from [{fromNode.I},{fromNode.J}] to [{toNode.I},{toNode.J}] - step {toNode.RiskLevel} - distance: {distance}");
+
+    processedNodes.Add(toNode);
+    distances[toNode] = distance;
+    
+    // if (fromNode.Neighbors.Except(processedNodes).Any() == false)
+    // {
+    //     // If FromNode doesn't have unvisited neighbors - remove it from edgeNodes
+    //     edgeNodes.Remove(fromNode);
+    // }
+    var removalCandidates = toNode.Neighbors.Intersect(processedNodes);
+    foreach (var removalCandidate in removalCandidates)
+    {
+        if (removalCandidate.Neighbors.Except(processedNodes).Any() == false)
+            edgeNodes.Remove(removalCandidate);
+    }
+    if (toNode.Neighbors.Except(processedNodes).Any())
+    {
+        // If ToNode has unvisited neighbors - add it to edgeNodes
+        edgeNodes.Add(toNode);
+    }
+
+} while (processedNodes.Contains(endNode) == false);
+
+Console.WriteLine($"Shortest/safest path to the end node has length of {distances[endNode]}");
+
+
+
+
+public class Node
+{
+    public int RiskLevel { get; set; }
+    public int I { get; }
+    public int J { get; }
+
+    public HashSet<Node> Neighbors { get; } = new();
+    
+    public Node(int riskLevel, int i, int j)
+    {
+        RiskLevel = riskLevel;
+        I = i;
+        J = j;
+    }
+
+    public void AddEdgeTo(Node node2)
+    {
+        Neighbors.Add(node2);
+    }
+
+    // public override bool Equals(object? obj)
+    // {
+    //     if (obj is Node node2)
+    //     {
+    //         return this.Name == node2.Name;
+    //     }
+    //
+    //     return false;
+    // }
+    
+    public override string ToString()
+    {
+        return $"[{I},{J}]: {RiskLevel}";
+    }
+}
