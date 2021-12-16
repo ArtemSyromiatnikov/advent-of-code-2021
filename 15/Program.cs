@@ -55,7 +55,6 @@ var startNode = map[0, 0];
 var endNode = map[FULL_SIZE-1, FULL_SIZE-1];
 
 
-//var processedNodes = new HashSet<Node>() { startNode };
 var processedNodes = new Dictionary<Node, GraphPath>();
 
 var graphPathsSorted = new List<GraphPath>();
