@@ -28,7 +28,10 @@ Stopwatch sw = Stopwatch.StartNew();
 var masterScanner = allScanners[0];
 masterScanner.Location = new Point(0, 0, 0);
 
+
 var unprocessedScanners = allScanners.Skip(1).ToList();
+var allOffsetPermutations = unprocessedScanners
+    .ToDictionary(s => s, s => s.CalculateOffsetArraysWithRotations().ToList());
 
 while (unprocessedScanners.Any())
 {
@@ -40,14 +43,13 @@ while (unprocessedScanners.Any())
         Console.WriteLine($"  Trying scanner: {i+1}...");
         var currentScanner = unprocessedScanners[i];
 
-        var currentScannerOffsets = currentScanner.CalculateOffsetArraysWithRotations();
+        var currentScannerOffsets = allOffsetPermutations[currentScanner];
         if (AreOffsetsIntersecting(masterOffsets, currentScannerOffsets, out var masterPoint, out var matchingOffsets))
         {
             masterScanner.AddPoints(masterPoint, matchingOffsets.Offsets);
-            Console.WriteLine($"Match found! Master point {masterPoint} corresponds to scanner point {matchingOffsets.ReferencePoint}");
             currentScanner.Location = matchingOffsets.ScannerLocation + masterPoint;
-            Console.WriteLine($"bad scanner location: {matchingOffsets.ReferencePoint - masterPoint} ???");
-            Console.WriteLine($"Good scanner location: {currentScanner.Location} ???");
+            //Console.WriteLine($"Match found! Master point {masterPoint} corresponds to scanner point {matchingOffsets.ReferencePoint}");
+            Console.WriteLine($"  Scanner location: {currentScanner.Location} ???");
             unprocessedScanners.Remove(currentScanner);
             
             break;
