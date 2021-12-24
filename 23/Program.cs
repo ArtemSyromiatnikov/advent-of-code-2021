@@ -1,7 +1,4 @@
-﻿ 
-
-
-// Test input:
+﻿// Test input:
 // #############
 // #...........#
 //  01234567890
@@ -9,14 +6,23 @@
 //   #A#D#C#A#
 //   #########
 
+//#D#C#B#A#
+//#D#B#A#C#
 
 using System.Diagnostics;
 
-var input = new[] {
+var inputTestPart1 = new[] {
     new[] { 'A', 'B' }, // down -> up
     new[] { 'D', 'C' },
     new[] { 'C', 'B' },
     new[] { 'A', 'D' }
+};
+
+var inputTestPart2 = new[] {
+    new[] { 'A', 'D', 'D', 'B' }, // down -> up
+    new[] { 'D', 'B', 'C', 'C' },
+    new[] { 'C', 'A', 'B', 'B' },
+    new[] { 'A', 'C', 'A', 'D' }
 };
 
 
@@ -25,19 +31,27 @@ var input = new[] {
 // ###C#A#D#D###
 //   #B#A#B#C#
 //   #########
-char[][] inputFull = new[] {
+char[][] inputFullPart1 = new[] {
     new[] { 'B', 'C' }, // down -> up
     new[] { 'A', 'A' },
     new[] { 'B', 'D' },
     new[] { 'C', 'D' }
 };
 
+char[][] inputFullPart2 = new[] {
+    new[] { 'B', 'D', 'D', 'C' }, // down -> up
+    new[] { 'A', 'B', 'C', 'A' },
+    new[] { 'B', 'A', 'B', 'D' },
+    new[] { 'C', 'C', 'A', 'D' }
+};
+
 
 Stopwatch sw = Stopwatch.StartNew();
 // processed Burrow hash - best score achieved
-Dictionary<String, int> processedHashes = new();
+Dictionary<String, int> processedHashesForSpeed = new();
+Dictionary<String, bool> processedHashesForSuccess = new();
 
-var initialBurrow = new Burrow(inputFull);
+var initialBurrow = new Burrow(inputFullPart2);         // <---- Input here!!! ---------------------------
 Burrow? bestBurrow = null;
 
 
@@ -59,60 +73,78 @@ foreach (var action in bestBurrow.History)
 
 
 
-void PerformNextMove(Burrow burrow, int depth = 1)
+bool? PerformNextMove(Burrow burrow, int depth = 1)
 {
     // log
     if (burrow.Id % 1_000_000 == 0)
         Console.WriteLine($"iteration {burrow.Id}, best cost so far: {bestBurrow?.EnergyCost}");
     
     
-    //burrow.Print();
+    
     if (burrow.IsBurrowDone)
     {
         //Console.WriteLine("Success!");
         if (bestBurrow == null || burrow.EnergyCost < bestBurrow.EnergyCost)
             bestBurrow = burrow;
-        return;
-    }
-
-    if (bestBurrow != null && burrow.EnergyCost >= bestBurrow.EnergyCost)
-    {
-        //Console.WriteLine("too expensive - skipping further effort");
-        return;
+        return true;
     }
 
     var hash = burrow.GenerateHash();
-    int bestCostForthisHashSoFar = processedHashes.ContainsKey(hash)
-        ? processedHashes[hash]
+    if (processedHashesForSuccess.ContainsKey(hash) && processedHashesForSuccess[hash] == false)
+    {
+        //Console.WriteLine("We already analyzed this case - and it only produces dead ends");
+        return false;
+    }
+    
+    
+    
+    int bestCostForthisHashSoFar = processedHashesForSpeed.ContainsKey(hash)
+        ? processedHashesForSpeed[hash]
         : Int32.MaxValue;
     if (bestCostForthisHashSoFar <= burrow.EnergyCost)
     {
         //Console.WriteLine("We already analyzed this case - and it was faster");
-        return;
+        return null;
     }
-    processedHashes[hash] = burrow.EnergyCost;
+    processedHashesForSpeed[hash] = burrow.EnergyCost;
 
     var actions = burrow.GeneratePossibleActions();
-    //int bestCostInThisBranch = Int32.MaxValue;;
+    List<bool?> canEverSucceed = new();
     foreach (var action in actions)
     {
         var newBurrow = burrow.ExecuteAction(action);
         //Console.WriteLine($"{burrow.Id} => {newBurrow.Id}, depth: {depth}");
-        PerformNextMove(newBurrow, depth+1);
+        //newBurrow.Print();
+        bool? canThisMoveSucceed = PerformNextMove(newBurrow, depth+1);
+        canEverSucceed.Add(canThisMoveSucceed);
     }
+
+    bool canSucceed = canEverSucceed.Any(c => c is true);
+    if (canSucceed)
+    {
+        processedHashesForSuccess[hash] = true;
+        return true;
+    }
+
+    bool guaranteedFailure = canEverSucceed.TrueForAll(v => v is false);
+    if (guaranteedFailure)
+    {
+        processedHashesForSuccess[hash] = false;
+        return false;
+    }
+
+    return null;
 }
 
 
 public class Burrow
 {
     public static int Count = 1;
-//    public readonly Shrimp[] AllShrimps;
+    public static int ROOM_CAPACITY = 4;
+
     public readonly int Id;
-    
     public readonly Shrimp?[] CorridorPlaces = new Shrimp[11]; // 11 nulls in beginning
-
     public readonly List<List<Shrimp>> Rooms = new();
-
     public readonly List<Action> History = new();
     public int EnergyCost = 0;
 
@@ -123,20 +155,18 @@ public class Burrow
         for (int i = 0; i < 4; i++)
         {
             var roomShrimps = new List<Shrimp>();
-            for (int j = 0; j < 2; j++)
+            for (int j = 0; j < ROOM_CAPACITY; j++)
             {
                 roomShrimps.Add(new Shrimp(input[i][j]));
             }
             Rooms.Add(roomShrimps);
         }
-//        AllShrimps = Rooms.SelectMany(r => r).ToArray();
     }
 
     // Cloning ctor
     private Burrow(Burrow input)
     {
         Id = Count++;
-//        AllShrimps = input.AllShrimps;  // no need to clone
         CorridorPlaces = (Shrimp[])input.CorridorPlaces.Clone(); // clone
         History = new List<Action>(input.History);
         EnergyCost = input.EnergyCost;
@@ -163,11 +193,12 @@ public class Burrow
 
     private IEnumerable<Shrimp> GetDoneResindentsInRoom(List<Shrimp> roomResidents, char roomClass)
     {
-        if (roomResidents.Count > 0 && roomResidents[0].Name == roomClass)
+        for (int i = 0; i < roomResidents.Count; i++)
         {
-            yield return roomResidents[0];
-            if (roomResidents.Count > 1 && roomResidents[1].Name == roomClass)
-                yield return roomResidents[1];
+            if (roomResidents[i].Name == roomClass)
+                yield return roomResidents[i];
+            else
+                yield break;;
         }
     }
 
@@ -176,8 +207,8 @@ public class Burrow
 
     public IEnumerable<Shrimp> PotentiallyActionableShrimps => OutermostShrimpsInRooms.Union(ShrimpsInCorridors).Except(DoneShrimps);
 
-    public bool IsBurrowDone => DoneShrimps.Count() == 8;
-    public static int[] HabitableCorridorPositions = new[] { 0, 1, 3, 5, 7, 9, 10 };
+    public bool IsBurrowDone => DoneShrimps.Count() == ROOM_CAPACITY * 4;
+    public static int[] HabitableCorridorPositions = { 0, 1, 3, 5, 7, 9, 10 };
 
     public List<Action> GeneratePossibleActions()
     {
@@ -231,7 +262,7 @@ public class Burrow
     {
         var roomIndex = GetTargetRoomIndex(shrimp);
         var alienCount = Rooms[roomIndex].Count(sh => sh.Name != shrimp.Name);
-        return Rooms[roomIndex].Count < 2 && alienCount == 0;
+        return Rooms[roomIndex].Count < ROOM_CAPACITY && alienCount == 0;
 
     }
 
@@ -246,12 +277,12 @@ public class Burrow
     {
         var roomIndex = GetCurrentRoomIndex(shrimp);
         var indexInRoom = Rooms[roomIndex].FindIndex(sh => sh == shrimp);
-        return 2 - indexInRoom;
+        return ROOM_CAPACITY - indexInRoom;
     }
 
     private int CountStepsToEnterRoom(int roomIndex)
     {
-        return 2 - Rooms[roomIndex].Count;
+        return ROOM_CAPACITY - Rooms[roomIndex].Count;
     }
 
     // from which corridor positions does one enter this room?
@@ -343,7 +374,11 @@ public class Burrow
     {
         CorridorPlaces[action.PositionInCorridor] = action.Shrimp;
         var roomIndex = GetCurrentRoomIndex(action.Shrimp);
-        Rooms[roomIndex].Remove(action.Shrimp);
+
+        var outermostShrimp = Rooms[roomIndex].Last();
+        if (outermostShrimp != action.Shrimp)
+            throw new Exception("Shrimp moved to the corridor should be the outermost in the Room!");
+        Rooms[roomIndex].Remove(outermostShrimp);
     }
 
     private void ExecuteGoToRoom(GoToRoom action)
@@ -357,6 +392,8 @@ public class Burrow
             }
         }
         Rooms[action.TargetRoomIndex].Add(action.Shrimp);
+        if (Rooms[action.TargetRoomIndex].Count > 4)
+            throw new Exception("Room overflow!");
     }
 
 // #############
@@ -370,7 +407,9 @@ public class Burrow
         
         Console.WriteLine($"#############");
         Console.WriteLine($"#{corridorLine}#");
-        Console.WriteLine($"###{room(0,1)}#{room(1,1)}#{room(2,1)}#{room(3,1)}###");
+        Console.WriteLine($"###{room(0,3)}#{room(1,3)}#{room(2,3)}#{room(3,3)}###");
+        Console.WriteLine($"  #{room(0,2)}#{room(1,2)}#{room(2,2)}#{room(3,2)}#  ");
+        Console.WriteLine($"  #{room(0,1)}#{room(1,1)}#{room(2,1)}#{room(3,1)}#  ");
         Console.WriteLine($"  #{room(0,0)}#{room(1,0)}#{room(2,0)}#{room(3,0)}#  ");
         Console.WriteLine($"  #########  ");
 
@@ -388,12 +427,8 @@ public class Burrow
         var corridorLine = String.Join(null, CorridorPlaces.Select(p => p?.Name ?? '.'));
         foreach (var room in Rooms)
         {
-            if (room.Count == 0)
-                corridorLine += "..";
-            else if (room.Count == 1)
-                corridorLine += room[0].Name + ".";
-            else
-                corridorLine += room[0].Name + room[1].Name;
+            corridorLine += String.Join(null, room.Select(p => p.Name));
+            corridorLine += new string('.', ROOM_CAPACITY - room.Count);
         }
 
         return corridorLine;
