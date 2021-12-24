@@ -85,7 +85,7 @@ void PerformNextMove(Burrow burrow, int depth = 1)
     int bestCostForthisHashSoFar = processedHashes.ContainsKey(hash)
         ? processedHashes[hash]
         : Int32.MaxValue;
-    if (bestCostForthisHashSoFar < burrow.EnergyCost)
+    if (bestCostForthisHashSoFar <= burrow.EnergyCost)
     {
         //Console.WriteLine("We already analyzed this case - and it was faster");
         return;
